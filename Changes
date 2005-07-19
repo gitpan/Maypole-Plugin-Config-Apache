@@ -1,5 +1,8 @@
 Revision history for Maypole-Plugin-Config-Apache
 
+0.11   Tues 19 July, 2005 10:30
+        - was skipping MaypoleEval entries entirely
+
 0.1    Mon  18 July, 2005 20:30
         First version, released on an unsuspecting world.
 

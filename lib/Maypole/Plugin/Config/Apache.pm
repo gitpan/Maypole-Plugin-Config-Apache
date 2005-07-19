@@ -7,7 +7,7 @@ use Apache;
 use Maypole::Config;
 use NEXT;
 
-our $VERSION = '0.1';
+our $VERSION = '0.11';
 
 =head1 NAME
 
@@ -80,7 +80,7 @@ sub setup
     
     my $config = {};
     
-    foreach my $k ( grep { /^Maypole/ && ! /^MaypoleEval/ } keys %$apache_cfg )
+    foreach my $k ( grep { /^Maypole/ } keys %$apache_cfg )
     {
         my @v = $apache_cfg->get( $k );
         
@@ -102,7 +102,7 @@ sub setup
     
     if ( $r->debug )
     {
-        Data::Dumper->require || die "Failed to load Data::Dumper: $@";
+        Data::Dumper->require || die "Failed to load Data::Dumper for debug output: $@";
         warn "Maypole config from Apache config file: " . Data::Dumper::Dumper( $config );
     }
     
@@ -205,6 +205,8 @@ David Baird, C<< <cpan@riverside-cms.co.uk> >>
 =head1 BUGS
 
 I think a hash with a single entry might not work, prod me if you need this. 
+
+Won't work for config variables with capital letters in them. 
 
 Please report any bugs or feature requests to
 C<bug-maypole-plugin-config-apache@rt.cpan.org>, or through the web interface at
