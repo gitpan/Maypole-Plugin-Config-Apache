@@ -5,8 +5,8 @@ WriteMakefile
           'NAME' => 'Maypole::Plugin::Config::Apache',
           'VERSION_FROM' => 'lib/Maypole/Plugin/Config/Apache.pm',
           'PREREQ_PM' => {
-                           'Maypole::Config' => '0',
                            'NEXT' => '0',
+                           'Test::Exception' => '0',
                            'Test::More' => '0'
                          },
           'INSTALLDIRS' => 'site',

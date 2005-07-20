@@ -3,11 +3,11 @@ package Maypole::Plugin::Config::Apache;
 use warnings;
 use strict;
 
-use Apache;
-use Maypole::Config;
+#use Apache;
+#use Maypole::Config;
 use NEXT;
 
-our $VERSION = '0.11';
+our $VERSION = '0.2';
 
 =head1 NAME
 
@@ -20,31 +20,57 @@ Maypole::Plugin::Config::Apache - read config settings from httpd.conf
     
     # in httpd.conf
     
+    # same as $config->application_name( "The Beer Database" )
     PerlSetVar MaypoleApplicationName "The Beer Database"
-    PerlSetVar MaypoleUriBase         /beerdb
-    PerlSetVar MaypoleTemplateRoot    /home/beerdb/www/beerdb/htdocs
-    PerlSetVar MaypoleRowsPerPage     10
     
-    PerlSetVar MaypoleDsn             "dbi:mysql:BeerDB"
-    PerlSetVar MaypoleUser            username
-    PerlSetVar MaypolePass            password
+    PerlSetVar MaypoleDsn   dbi:mysql:BeerDB
+    PerlSetVar MaypoleUser  username
+    PerlSetVar MaypolePass  password
     
-    # set a listref
+    # same as $config->display_tables( [ qw( beer brewery pub style ) ] )
     PerlAddVar MaypoleDisplayTables  beer 
     PerlAddVar MaypoleDisplayTables  brewery 
     PerlAddVar MaypoleDisplayTables  pub 
     PerlAddVar MaypoleDisplayTables  style
     
-    # set a hashref
+    # same as $config->masonx( { data_dir   => '/home/beerdb/www/beerdb/mdata', 
+    #                            in_package => 'BeerDB::TestApp',
+    #                            comp_root  => [ [ factory => '/usr/local/www/maypole/factory' ] ],
+    #                            } )
     PerlAddVar MaypoleMasonx "data_dir   => '/home/beerdb/www/beerdb/mdata'"
     PerlAddVar MaypoleMasonx "in_package => 'BeerDB::TestApp'"
     PerlAddVar MaypoleMasonx "comp_root => [ [ factory => '/usr/local/www/maypole/factory' ] ]"
     
-    # set something from Perl code
-    PerlSetVar MaypoleEvalFlooberiser "[ [ foo => 'bar', baz => { bee => 'boo } ] ]"
-    
-    # get lazy with lists
+    # set something from arbitrary Perl code 
     PerlSetVar MaypoleEvalDisplayTables "[ qw( beer brewery pub style ) ]"
+    
+    # merging a hash of hashes - 
+    #           $config->session( { args => { Directory     => '/tmp/sessions/beerdb',
+    #                                         LockDirectory => '/tmp/sessionlocks/beerdb',
+    #                                         }
+    #                               } )
+    PerlAddVar MaypoleSession "args => { Directory     => '/tmp/sessions/beerdb' }"
+    PerlAddVar MaypoleSession "args => { LockDirectory => '/tmp/sessionlocks/beerdb' }"
+    
+    
+    # merging a hash of arrayrefs involves a nasty hack...
+    #           $config->masonx->{comp_root} = [ [ factory => '/usr/local/www/maypole/factory' ],
+    #                                            [ library => '/usr/local/www/mason/lib' ],
+    #                                            ];
+    PerlAddVar MaypoleMasonx "comp_root => [ [ factory => '/usr/local/www/maypole/factory' ] ]"
+    PerlAddVar MaypoleMasonx "comp_root =>   [ library => '/usr/local/www/mason/lib' ]"
+    
+    # ...more clearly shown here. To build up a hash of arrayrefs, the first value must 
+    # be an array ref (to set up the value as an arrayref), while subsequent items are scalars
+    # and are pushed onto the arrayref:
+    #           $config->masonx->{plugins} = [ MasonX::Plugin::Foo->new,
+    #                                          MasonX::Plugin::Bar->new,
+    #                                          MasonX::Plugin::Baz->new,
+    #                                          ];
+    PerlAddVar MaypoleMasonx "plugins => [ MasonX::Plugin::Foo->new ]"
+    PerlAddVar MaypoleMasonx "plugins =>   MasonX::Plugin::Bar->new"
+    PerlAddVar MaypoleMasonx "plugins =>   MasonX::Plugin::Baz->new"
+    
     
 
 =head1 DESCRIPTION
@@ -55,7 +81,11 @@ Everything after the C<Maypole> or C<MaypoleEval> is the variable name, in Studl
 Values from C<MaypoleEval> variables are run through an C<eval>, allowing arbitrarily complex 
 data structures to be set, including coderefs, if anything needed that. 
 
-Any value from a C<PerlAddVar> that contains a C<< => >> symbol is also run through an eval, so any valid perl expression for a hash value can be used.
+Any value from a C<PerlAddVar> that contains a C<< => >> symbol is also run through an eval, so any 
+valid perl expression for a hash value can be used.
+
+An attempt is made to intelligently merge hash entries in multiple PerlAddVar statements. Multiple 
+entries with the same key are merged into a single hashref or arrayref value. 
 
 Put C<Config::Apache> at the front of the Maypole::Application call, so that later plugins 
 have access to the configuration settings. If your httpd.conf contains all of your Maypole 
@@ -96,7 +126,8 @@ sub setup
         }
         else
         {
-            $config->{ $new_k } = @v > 1 ? _fixup_addvar( $k, @v ) : $v[0];
+            #$config->{ $new_k } = @v > 1 ? _fixup_addvar( $k, @v ) : $v[0];
+            $config->{ $new_k } = _fixup( $k, @v );
         }
     }
     
@@ -113,22 +144,54 @@ sub setup
     $r->NEXT::DISTINCT::setup(@_);
 }    
     
-sub _fixup_addvar
+sub _fixup
 {
-    my ( $k, @v ) = @_;
+    my ( $StudlyVarName, @strings ) = @_;
     
-    my @array = grep { ! /=>/ } @v;
+    # counting '=>' matches would be wrong, because each string could have > 1
+    my @got_hash_sep = grep { /=>/ } @strings;
     
-    return \@array if @array == @v;
+    return @strings == 1 ? $strings[0] : [ @strings ] unless @got_hash_sep;
     
-    die "'=>' present in some but not all values of $k" if @array;
+    die "'=>' present in some but not all values of $StudlyVarName" if @got_hash_sep ne @strings;
 
-    # rather than parsing the value, just run it through a string eval, so anything 
-    # that would work in Perl, can go in the     
-    my @err;
-    my %hash = map { my @each = eval $_; push( @err, $@ ) if $@; @each } @v;
+    my %hash;
     
-    die "Error constructing hash for config entry $k", @err if @err;
+    my $merge = sub 
+    {
+        my ( $str ) =  @_;
+        my ( $k, @v ) = eval $str;
+        die "Error extracting value for $StudlyVarName: $@" if $@;
+        if ( exists $hash{ $k } )
+        {
+            if ( my $type = ref $hash{ $k } )
+            {
+                if ( $type eq 'ARRAY' )
+                {
+                    push @{ $hash{ $k } }, @v;
+                }
+                elsif ( $type eq 'HASH' )
+                {
+                    my %v = @v == 1 ? %{ $v[0] } : @v;
+                    %{ $hash{ $k } } = ( %{ $hash{ $k } }, %v );
+                }
+            }
+            else
+            {
+                # The key already holds a plain scalar value. 
+                # Convert it to an arrayref.
+                $hash{ $k } = [ $hash{ $k }, @v ];
+            }
+        }
+        else
+        {
+            #$hash{ $k } = [];
+            #push @{ $hash{ $k } }, @v;
+            $hash{ $k } = @v > 1 ? [ @v ] : $v[0];
+        }
+    };
+        
+    $merge->( $_ ) for @strings;
     
     return \%hash;
 } 
@@ -204,9 +267,9 @@ David Baird, C<< <cpan@riverside-cms.co.uk> >>
 
 =head1 BUGS
 
-I think a hash with a single entry might not work, prod me if you need this. 
-
 Won't work for config variables with capital letters in them. 
+
+Strange things will happen to anything containing '=>' that should not be interpreted as a hash entry.
 
 Please report any bugs or feature requests to
 C<bug-maypole-plugin-config-apache@rt.cpan.org>, or through the web interface at

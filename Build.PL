@@ -9,7 +9,8 @@ my $builder = Module::Build->new(
     dist_version_from   => 'lib/Maypole/Plugin/Config/Apache.pm',
     requires => {
         'Test::More' => 0,
-        'Maypole::Config' => 0,
+        'Test::Exception' => 0,
+        #'Maypole::Config' => 0,
         'NEXT' => 0,
     },
     add_to_cleanup      => [ 'Maypole-Plugin-Config-Apache-*' ],
