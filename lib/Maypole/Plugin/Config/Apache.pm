@@ -3,11 +3,9 @@ package Maypole::Plugin::Config::Apache;
 use warnings;
 use strict;
 
-#use Apache;
-#use Maypole::Config;
 use NEXT;
 
-our $VERSION = '0.2';
+our $VERSION = '0.21';
 
 =head1 NAME
 
@@ -105,6 +103,8 @@ sub setup
 {
     my $r = shift;
     
+    warn "Running " . __PACKAGE__ . " setup for $r" if $r->debug;
+    
     # an Apache::Table object
     my $apache_cfg = Apache->server->dir_config;
     
@@ -131,7 +131,7 @@ sub setup
         }
     }
     
-    if ( $r->debug )
+    if ( $r->debug > 1 )
     {
         Data::Dumper->require || die "Failed to load Data::Dumper for debug output: $@";
         warn "Maypole config from Apache config file: " . Data::Dumper::Dumper( $config );

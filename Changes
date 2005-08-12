@@ -1,5 +1,8 @@
 Revision history for Maypole-Plugin-Config-Apache
 
+0.201  Fri  12 Aug, 2005 23:50
+        - modified debug output
+
 0.2    Wed  20 July, 2005 23:30
         - considerably improved the range of data structures that can 
             be parsed
